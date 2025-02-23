@@ -1,6 +1,7 @@
 use std::fs::{self, read};
 
 use clap::{arg, crate_authors, crate_version, value_parser, Arg, ArgAction, ArgMatches, Command, ValueEnum};
+use std::rc::Rc;
 use std::collections::HashMap;
 
 
@@ -17,36 +18,62 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         None => panic!("please provide a file name")
     };
     let file_contents = fs::read_to_string(&file_name)?;
-    let file_contents_split = file_name.split('\n').collect::<Vec<_>>();
-    println!("file_contents: {:#?}", file_contents);
+    let file_contents_split = file_contents.split('\n').collect::<Vec<_>>();
+    println!("file_contents_split: {:#?}", file_contents_split);
+    let parse = parse(&file_contents_split, String::from("main"));
+    println!("parse result: {:#?}", parse);
     Ok(())
 }
 
-fn parse(file_contents: &Vec<&str>) -> Section {
-    let section_to_add: Section;
+fn parse(file_contents: &[&str], section_name: String) -> Section {
+    let mut section_to_add: Section = Section::new(section_name.clone(), vec![], HashMap::new());
+    let mut line_number = 0;
     for file_contents_line in file_contents {
-        if file_contents_line.contains('=') {
+        println!("file_contents: {:#?}", file_contents);
+        if let Some(i) = file_contents_line.chars().position(|x| x == '=') {
+            let _ = section_to_add.key_value_pair_hashmap.insert(String::from(file_contents_line[..i].trim()), String::from(file_contents_line[i+1..].trim())); 
 
         }
-        else if file_contents_line.starts_with('[') && file_contents_line.ends_with(']') {
-            let section_name = &file_contents_line[0..file_contents_line.len() - 1];
-            section_to_add.sub_sections.push(Section::new(parse(file_contents)))
+        else if file_contents_line.trim_start().starts_with('[') && file_contents_line.trim_end().ends_with(']') {
+            println!("enter here");
+            let section_name = String::from(&file_contents_line[..file_contents_line.len()]);
+            let lines_remaining = file_contents.get((line_number + 1)..);
+            if lines_remaining.is_some() {
+                section_to_add.sub_sections.push(Rc::new(parse(lines_remaining.unwrap(), section_name)));
+            }
+            return section_to_add;
         }
+        line_number += 1;
     }
-    Section::new(String::from("main"), Vec::new(), HashMap::new())
+    section_to_add
 }
 
+#[derive(Debug)]
 struct Section {
     section_name: String,
-    sub_sections: Vec<Box<Section>>,
+    sub_sections: Vec<Rc<Section>>,
     key_value_pair_hashmap: HashMap<String, String>
 }
 impl Section {
-    fn new(section_name: String, sub_section: Vec<Box<Section>>, key_value_pair_hashmap: HashMap<String, String>) -> Section {
+    fn new(section_name: String, sub_sections: Vec<Rc<Section>>, key_value_pair_hashmap: HashMap<String, String>) -> Section {
         Section {
             section_name,
-            sub_section,
+            sub_sections,
             key_value_pair_hashmap
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::Builder;
+
+    #[test]
+    fn a() -> Result<(), Box<dyn std::error::Error>> {
+        // let tempfile = Builder::new().prefix("test.toml").suffix(".toml").tempfile()?;
+        // let mut file = File::create(file_path)?;
+        // writeln!(file, "[package]");
+        Ok(())
     }
 }
