@@ -19,9 +19,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let file_contents = fs::read_to_string(&file_name)?;
     let file_contents_split = file_contents.split('\n').collect::<Vec<_>>();
-    println!("file_contents_split: {:#?}", file_contents_split);
     let parse = parse(&file_contents_split, String::from("main"));
-    println!("parse result: {:#?}", parse);
+    println!("parse: {:#?}", parse);
     Ok(())
 }
 
@@ -66,14 +65,23 @@ impl Section {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
+
     use super::*;
-    use tempfile::Builder;
+    use tempfile::{Builder, NamedTempFile, TempDir};
 
     #[test]
-    fn a() -> Result<(), Box<dyn std::error::Error>> {
-        // let tempfile = Builder::new().prefix("test.toml").suffix(".toml").tempfile()?;
-        // let mut file = File::create(file_path)?;
-        // writeln!(file, "[package]");
+    fn parse_contents_as_section_name_when_section_is_not_provided() -> Result<(), Box<dyn std::error::Error>> {
+        let mut tempfile: NamedTempFile = NamedTempFile::new()?;
+        let file_contents = "
+author=\"me\"
+name=\"mypackage\"
+version=\"0.1.0\"";
+        let _ = tempfile.write(file_contents.as_bytes());
+        let file_contents_split = file_contents.split('\n').collect::<Vec<_>>();
+        let res = parse(&file_contents_split, String::from("main"));
+        assert_eq!(res.key_value_pair_hashmap.keys().try_find(|f| **f.eq("author")), );
+        println!("{:#?}", res);
         Ok(())
     }
 }
