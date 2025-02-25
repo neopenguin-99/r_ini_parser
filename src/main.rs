@@ -1,3 +1,4 @@
+#![feature(try_find)]
 use std::fs::{self, read};
 
 use clap::{arg, crate_authors, crate_version, value_parser, Arg, ArgAction, ArgMatches, Command, ValueEnum};
@@ -68,7 +69,7 @@ mod tests {
     use std::io::Write;
 
     use super::*;
-    use tempfile::{Builder, NamedTempFile, TempDir};
+    use tempfile::NamedTempFile;
 
     #[test]
     fn parse_contents_as_section_name_when_section_is_not_provided() -> Result<(), Box<dyn std::error::Error>> {
@@ -80,8 +81,12 @@ version=\"0.1.0\"";
         let _ = tempfile.write(file_contents.as_bytes());
         let file_contents_split = file_contents.split('\n').collect::<Vec<_>>();
         let res = parse(&file_contents_split, String::from("main"));
-        assert_eq!(res.key_value_pair_hashmap.keys().try_find(|f| **f.eq("author")), );
-        println!("{:#?}", res);
+        let key = res.key_value_pair_hashmap.keys().find(|x| **x == String::from("author"));
+        let value = res.key_value_pair_hashmap.values().find(|x| **x == String::from("me"));
+        assert!(key.is_some_and(|x| *x == String::from("author")));
+        println!("{:#?}", res.key_value_pair_hashmap.keys());
+        println!("{:#?}", res.key_value_pair_hashmap.values());
+        assert!(value.is_some_and(|x| *x == String::from("me")));
         Ok(())
     }
 }
