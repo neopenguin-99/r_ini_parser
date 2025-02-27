@@ -17,12 +17,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let file_name = matches.remove_one::<String>("file").expect("please provide a file name");
     let file_contents = fs::read_to_string(&file_name)?;
     let file_contents_split = file_contents.split('\n').collect::<Vec<_>>();
-    let parse = parse(&file_contents_split, None);
+    let parse = parse(&file_contents_split, None, None);
     println!("parse: {:#?}", parse);
     Ok(())
 }
 
-fn parse(file_contents: &[&str], section_name: Option<String>) -> Section {
+fn parse(file_contents: &[&str], seek_to_column_in_line: Option<usize>, section_name: Option<String>) -> Section {
     let mut section_to_add: Section = Section::new(section_name.unwrap_or(String::from("global")), vec![], HashMap::new());
     let mut line_number = 0;
     for file_contents_line in file_contents {
@@ -30,10 +30,18 @@ fn parse(file_contents: &[&str], section_name: Option<String>) -> Section {
             let _ = section_to_add.key_value_pair_hashmap.insert(String::from(file_contents_line[..i].trim()), String::from(file_contents_line[i+1..].trim())); 
         }
         else if file_contents_line.trim_start().starts_with('[') && file_contents_line.trim_end().ends_with(']') {
-            let section_name = String::from(&file_contents_line[1..file_contents_line.len() - 1]);
-            let lines_remaining = file_contents.get((line_number + 1)..);
-            if lines_remaining.is_some() {
-                section_to_add.sub_sections.push(Rc::new(parse(lines_remaining.unwrap(), Some(section_name))));
+            let file_contents_line_as_char_vec: Vec<char> = file_contents_line.chars().collect();
+            if let Some(location_of_dot_separator) = file_contents_line_as_char_vec[seek_to_column_in_line.unwrap_or(0)..].iter().position(|x| *x == '.') {
+                let section_name = String::from(&file_contents_line[1..file_contents_line.len() - 1]);
+                let lines_remaining = file_contents.get((line_number)..);
+                section_to_add.sub_sections.push(Rc::new(parse(lines_remaining.unwrap(), Some(location_of_dot_separator + 1), Some(section_name))));
+            }
+            else {
+                let section_name = String::from(&file_contents_line[1..file_contents_line.len() - 1]);
+                let lines_remaining = file_contents.get((line_number + 1)..);
+                if lines_remaining.is_some() {
+                    section_to_add.sub_sections.push(Rc::new(parse(lines_remaining.unwrap(), None, Some(section_name))));
+                }
             }
             return section_to_add;
         }
@@ -107,7 +115,7 @@ version=0.1.0";
         assert!(tempfile.write(file_contents.as_bytes()).is_ok_and(|x| x > 0));
         let file_contents_split = file_contents.split('\n').collect::<Vec<_>>();
         // Act
-        let res = parse(&file_contents_split, None);
+        let res = parse(&file_contents_split, None, None);
         // Assert
         assert_eq!(res.section_name, String::from("global"));
         assert!(res.key_value_pair_hashmap.is_empty());
@@ -123,6 +131,42 @@ version=0.1.0";
         assert!(package_section.sub_sections.is_empty());
         
         // Teardown
+        tempfile.close()?;
+        Ok(())
+    }
+
+    #[test]
+    fn supports_sub_sections_via_dot_operator() -> Result<(), Box<dyn std::error::Error>> {
+        // Arrange
+        let mut tempfile: NamedTempFile = NamedTempFile::new()?;
+        let file_contents = "
+[package]
+author=me
+name=mypackage
+version=0.1.0
+[package.more]
+package_size=330KiB
+licence=GPLv3
+";
+        // test can only work when the file contains the text in file_contents
+        assert!(tempfile.write(file_contents.as_bytes()).is_ok_and(|x| x > 0));
+        let file_contents_split = file_contents.split('\n').collect::<Vec<_>>();
+        // Act
+
+        let res = parse(&file_contents_split, None, None);
+
+        // Assert
+        let package_section = res.sub_sections.get(0).unwrap();
+
+        assert_eq!(package_section.section_name, String::from("package"));
+        assert_eq!(package_section.key_value_pair_hashmap.len(), 3);
+        assert_eq!(package_section.sub_sections.len(), 1);
+
+        let more_sub_section = package_section.sub_sections.get(0).unwrap();
+        assert_eq!(more_sub_section.section_name, String::from("more"));
+        assert_eq!(more_sub_section.key_value_pair_hashmap.len(), 2);
+        assert!(more_sub_section.sub_sections.is_empty());
+
         tempfile.close()?;
         Ok(())
     }
