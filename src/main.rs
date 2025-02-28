@@ -31,8 +31,11 @@ fn parse(file_contents: &[&str], seek_to_column_in_line: Option<usize>, section_
         }
         else if file_contents_line.trim_start().starts_with('[') && file_contents_line.trim_end().ends_with(']') {
             let file_contents_line_as_char_vec: Vec<char> = file_contents_line.chars().collect();
-            if let Some(location_of_dot_separator) = file_contents_line_as_char_vec[seek_to_column_in_line.unwrap_or(0)..].iter().position(|x| *x == '.') {
-                let section_name = String::from(&file_contents_line[1..file_contents_line.len() - 1]);
+            if let Some(location_of_dot_separator) = file_contents_line_as_char_vec[seek_to_column_in_line.unwrap_or(1)..].iter().position(|x| *x == '.') {
+                let section_name = String::from(&file_contents_line[seek_to_column_in_line.unwrap_or(1)..location_of_dot_separator]);
+                if String::from(&file_contents_line[seek_to_column_in_line.unwrap_or(1)..location_of_dot_separator]) == section_to_add.section_name {
+                    section_to_add.key_value_pair_hashmap.insert(String::from(file_contents_line[..i].trim()), String::from(file_contents_line[i+1..].trim()));
+                }
                 let lines_remaining = file_contents.get((line_number)..);
                 section_to_add.sub_sections.push(Rc::new(parse(lines_remaining.unwrap(), Some(location_of_dot_separator + 1), Some(section_name))));
             }
@@ -85,7 +88,7 @@ version=0.1.0";
         assert!(tempfile.write(file_contents.as_bytes()).is_ok_and(|x| x > 0));
         let file_contents_split = file_contents.split('\n').collect::<Vec<_>>();
         // Act
-        let res = parse(&file_contents_split, None);
+        let res = parse(&file_contents_split, None, None);
         // Assert
         assert_eq!(res.section_name, String::from("global"));
         assert_eq!(res.key_value_pair_hashmap.len(), 3);
@@ -169,5 +172,46 @@ licence=GPLv3
 
         tempfile.close()?;
         Ok(())
+    }
+
+    #[test]
+    fn supports_sub_sections_via_dot_operator_even_when_parent_section_does_not_exist() -> Result<(), Box<dyn std::error::Error>> {
+
+        let mut tempfile: NamedTempFile = NamedTempFile::new()?;
+            // Arrange
+        let file_contents = "
+[package]
+author=me
+name=mypackage
+version=0.1.0
+[info.more]
+favorite_animal=monkey
+favorite_colour=blue
+";
+        // test can only work when the file contains the text in file_contents
+        assert!(tempfile.write(file_contents.as_bytes()).is_ok_and(|x| x > 0));
+        let file_contents_split = file_contents.split('\n').collect::<Vec<_>>();
+        // Act
+        let res = parse(&file_contents_split, None, None);
+
+        // Assert
+        let package_section = res.sub_sections.get(0).unwrap();
+
+        assert_eq!(package_section.section_name, String::from("package"));
+        assert_eq!(package_section.key_value_pair_hashmap.len(), 3);
+        assert_eq!(package_section.sub_sections.len(), 1);
+
+        let info_sub_section = package_section.sub_sections.get(0).unwrap();
+        assert_eq!(info_sub_section.section_name, String::from("info"));
+        assert_eq!(info_sub_section.key_value_pair_hashmap.len(), 0);
+
+        let more_sub_section = info_sub_section.sub_sections.get(0).unwrap();
+        assert_eq!(more_sub_section.section_name, String::from("more"));
+        assert_eq!(more_sub_section.key_value_pair_hashmap.len(), 2);
+        assert!(more_sub_section.sub_sections.is_empty());
+
+        tempfile.close()?;
+        Ok(())
+
     }
 }
