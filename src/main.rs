@@ -1,7 +1,7 @@
 #![feature(try_find)]
-use std::fs::{self, read};
+use std::fs::{self};
 
-use clap::{arg, crate_authors, crate_version, value_parser, Arg, ArgAction, ArgMatches, Command, ValueEnum};
+use clap::{crate_authors, crate_version, value_parser, Arg, ArgMatches, Command};
 use std::rc::Rc;
 use std::collections::HashMap;
 
@@ -32,10 +32,17 @@ fn parse(file_contents: &[&str], seek_to_column_in_line: Option<usize>, section_
         else if file_contents_line.trim_start().starts_with('[') && file_contents_line.trim_end().ends_with(']') {
             let file_contents_line_as_char_vec: Vec<char> = file_contents_line.chars().collect();
             if let Some(location_of_dot_separator) = file_contents_line_as_char_vec[seek_to_column_in_line.unwrap_or(1)..].iter().position(|x| *x == '.') {
-                let section_name = String::from(&file_contents_line[seek_to_column_in_line.unwrap_or(1)..location_of_dot_separator]);
-                if String::from(&file_contents_line[seek_to_column_in_line.unwrap_or(1)..location_of_dot_separator]) == section_to_add.section_name {
-                    section_to_add.key_value_pair_hashmap.insert(String::from(file_contents_line[..i].trim()), String::from(file_contents_line[i+1..].trim()));
-                }
+                println!("new");
+                println!("{:#?}", seek_to_column_in_line);
+                println!("{}", location_of_dot_separator + 1);
+                println!("{}", &file_contents_line);
+                // println!("{}", &file_contents_line[seek_to_column_in_line.unwrap_or(1)..location_of_dot_separator + 1]);
+                let section_name = String::from(&file_contents_line[seek_to_column_in_line.unwrap_or(1)..seek_to_column_in_line.unwrap_or(1) + location_of_dot_separator]);
+                // let section_name_2 = String::from(&file_contents_line[seek_to_column_in_line.unwrap_or(1)..location_of_dot_separator + 1]);
+                // if String::from(&file_contents_line[seek_to_column_in_line.unwrap_or(1)..location_of_dot_separator]) == section_to_add.section_name {
+                    // section_to_add.key_value_pair_hashmap.insert(String::from(file_contents_line[..i].trim()), String::from(file_contents_line[i+1..].trim()));
+                // }
+                println!("{}", section_name);
                 let lines_remaining = file_contents.get((line_number)..);
                 section_to_add.sub_sections.push(Rc::new(parse(lines_remaining.unwrap(), Some(location_of_dot_separator + 1), Some(section_name))));
             }
