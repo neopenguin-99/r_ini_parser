@@ -3,6 +3,7 @@ use std::fs::{self};
 
 use clap::{crate_authors, crate_version, value_parser, Arg, ArgMatches, Command};
 use std::rc::Rc;
+use std::sync::Mutex;
 use std::collections::HashMap;
 
 
@@ -17,19 +18,51 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let file_name = matches.remove_one::<String>("file").expect("please provide a file name");
     let file_contents = fs::read_to_string(&file_name)?;
     let file_contents_split = file_contents.split('\n').collect::<Vec<_>>();
-    let parse = parse(&file_contents_split, None, None);
+    let parse = parse(&file_contents_split, None, None, None);
     println!("parse: {:#?}", parse);
     Ok(())
 }
 
-fn parse(file_contents: &[&str], seek_to_column_in_line: Option<usize>, section_name: Option<String>) -> Section {
-    let mut section_to_add: Section = Section::new(section_name.unwrap_or(String::from("global")), vec![], HashMap::new());
+
+fn parse_sections(file_contents: &[&str], parent_section: Option<Box<Section>>) -> Section {
+    let mut global_section: Section = Section::new(String::from("global"), vec![], HashMap::new(), parent_section);
+
+    for file_contents_line in file_contents {
+        let section_names = file_contents_line.split('.').collect::<Vec<&str>>();
+        let mut current_section_ref = Mutex::new(global_section);
+        for section_name in section_names {
+            if let Some(res) = current_section_ref.lock().unwrap().sub_sections.iter().filter(|x| x.lock().unwrap().section_name == String::from(section_name)).last() { // add it to the section if that section already exists
+                current_section_ref = *res;
+            }
+            else {
+                let new_section = Mutex::new(Section::new(String::from(section_name), vec![], HashMap::new(), None));
+                current_section_ref.lock().unwrap().sub_sections.push(new_section);
+            }
+        }
+    }
+    global_section
+}
+
+
+
+fn parse(file_contents: &[&str], seek_to_column_in_line: Option<usize>, section_name: Option<String>, parent_section: Option<Box<Section>>) -> Section {
+    let mut section_to_add: Section = Section::new(section_name.unwrap_or(String::from("global")), vec![], HashMap::new(), parent_section);
     let mut line_number = 0;
     for file_contents_line in file_contents {
         if let Some(i) = file_contents_line.chars().position(|x| x == '=') {
             let _ = section_to_add.key_value_pair_hashmap.insert(String::from(file_contents_line[..i].trim()), String::from(file_contents_line[i+1..].trim())); 
         }
         else if file_contents_line.trim_start().starts_with('[') && file_contents_line.trim_end().ends_with(']') {
+            let file_contents_line_as_char_vec: Vec<char> = file_contents_line.chars().collect();
+            if let Some(location_of_dot_separator) = file_contents_line_as_char_vec[seek_to_column_in_line.unwrap_or(0)..].iter().position(|x| *x == '.') {
+
+            }
+            else {
+
+            }
+
+
+
             let file_contents_line_as_char_vec: Vec<char> = file_contents_line.chars().collect();
             if let Some(location_of_dot_separator) = file_contents_line_as_char_vec[seek_to_column_in_line.unwrap_or(1)..].iter().position(|x| *x == '.') {
                 println!("new");
@@ -44,13 +77,13 @@ fn parse(file_contents: &[&str], seek_to_column_in_line: Option<usize>, section_
                 // }
                 println!("{}", section_name);
                 let lines_remaining = file_contents.get((line_number)..);
-                section_to_add.sub_sections.push(Rc::new(parse(lines_remaining.unwrap(), Some(location_of_dot_separator + 1), Some(section_name))));
+                section_to_add.sub_sections.push(Rc::new(parse(lines_remaining.unwrap(), Some(location_of_dot_separator + 1), Some(section_name), Some(Box::new(section_to_add.clone())))));
             }
             else {
                 let section_name = String::from(&file_contents_line[1..file_contents_line.len() - 1]);
                 let lines_remaining = file_contents.get((line_number + 1)..);
                 if lines_remaining.is_some() {
-                    section_to_add.sub_sections.push(Rc::new(parse(lines_remaining.unwrap(), None, Some(section_name))));
+                    section_to_add.sub_sections.push(Rc::new(parse(lines_remaining.unwrap(), None, Some(section_name), Some(Box::new(section_to_add.clone())))));
                 }
             }
             return section_to_add;
@@ -60,15 +93,17 @@ fn parse(file_contents: &[&str], seek_to_column_in_line: Option<usize>, section_
     section_to_add
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 struct Section {
+    parent_section: Option<Box<Section>>,
     section_name: String,
-    sub_sections: Vec<Rc<Section>>,
+    sub_sections: Vec<Mutex<Section>>,
     key_value_pair_hashmap: HashMap<String, String>
 }
 impl Section {
-    fn new(section_name: String, sub_sections: Vec<Rc<Section>>, key_value_pair_hashmap: HashMap<String, String>) -> Section {
+    fn new(section_name: String, sub_sections: Vec<Mutex<Section>>, key_value_pair_hashmap: HashMap<String, String>, parent_section: Option<Box<Section>>) -> Section {
         Section {
+            parent_section,
             section_name,
             sub_sections,
             key_value_pair_hashmap
@@ -95,7 +130,7 @@ version=0.1.0";
         assert!(tempfile.write(file_contents.as_bytes()).is_ok_and(|x| x > 0));
         let file_contents_split = file_contents.split('\n').collect::<Vec<_>>();
         // Act
-        let res = parse(&file_contents_split, None, None);
+        let res = parse(&file_contents_split, None, None, None);
         // Assert
         assert_eq!(res.section_name, String::from("global"));
         assert_eq!(res.key_value_pair_hashmap.len(), 3);
@@ -125,7 +160,7 @@ version=0.1.0";
         assert!(tempfile.write(file_contents.as_bytes()).is_ok_and(|x| x > 0));
         let file_contents_split = file_contents.split('\n').collect::<Vec<_>>();
         // Act
-        let res = parse(&file_contents_split, None, None);
+        let res = parse(&file_contents_split, None, None, None);
         // Assert
         assert_eq!(res.section_name, String::from("global"));
         assert!(res.key_value_pair_hashmap.is_empty());
@@ -163,7 +198,7 @@ licence=GPLv3
         let file_contents_split = file_contents.split('\n').collect::<Vec<_>>();
         // Act
 
-        let res = parse(&file_contents_split, None, None);
+        let res = parse(&file_contents_split, None, None, None);
 
         // Assert
         let package_section = res.sub_sections.get(0).unwrap();
@@ -199,7 +234,7 @@ favorite_colour=blue
         assert!(tempfile.write(file_contents.as_bytes()).is_ok_and(|x| x > 0));
         let file_contents_split = file_contents.split('\n').collect::<Vec<_>>();
         // Act
-        let res = parse(&file_contents_split, None, None);
+        let res = parse(&file_contents_split, None, None, None);
 
         // Assert
         let package_section = res.sub_sections.get(0).unwrap();
