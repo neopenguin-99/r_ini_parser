@@ -49,8 +49,15 @@ fn parse(file_contents: &[&str], seek_to_column_in_line: Option<usize>, section_
     let mut section_to_add: Section = Section::new(section_name.unwrap_or(String::from("global")), vec![], HashMap::new(), parent_section);
     let mut line_number = 0;
     for file_contents_line in file_contents {
+        let line_end: usize;
+        if let Some(i) = file_contents_line.chars().position(|x| x == '#') {
+            line_end = i;
+        }
+        else {
+            line_end = file_contents_line.len();
+        }
         if let Some(i) = file_contents_line.chars().position(|x| x == '=') {
-            let _ = section_to_add.key_value_pair_hashmap.insert(String::from(file_contents_line[..i].trim()), String::from(file_contents_line[i+1..].trim())); 
+            let _ = section_to_add.key_value_pair_hashmap.insert(String::from(file_contents_line[..i].trim()), String::from(file_contents_line[i+1..line_end].trim())); 
         }
         else if file_contents_line.trim_start().starts_with('[') && file_contents_line.trim_end().ends_with(']') {
             let file_contents_line_as_char_vec: Vec<char> = file_contents_line.chars().collect();
@@ -77,13 +84,13 @@ fn parse(file_contents: &[&str], seek_to_column_in_line: Option<usize>, section_
                 // }
                 println!("{}", section_name);
                 let lines_remaining = file_contents.get((line_number)..);
-                section_to_add.sub_sections.push(Rc::new(parse(lines_remaining.unwrap(), Some(location_of_dot_separator + 1), Some(section_name), Some(Box::new(section_to_add.clone())))));
+                section_to_add.sub_sections.push(parse(lines_remaining.unwrap(), Some(location_of_dot_separator + 1), Some(section_name), Some(Box::new(section_to_add.clone()))));
             }
             else {
                 let section_name = String::from(&file_contents_line[1..file_contents_line.len() - 1]);
                 let lines_remaining = file_contents.get((line_number + 1)..);
                 if lines_remaining.is_some() {
-                    section_to_add.sub_sections.push(Rc::new(parse(lines_remaining.unwrap(), None, Some(section_name), Some(Box::new(section_to_add.clone())))));
+                    section_to_add.sub_sections.push(parse(lines_remaining.unwrap(), None, Some(section_name), Some(Box::new(section_to_add.clone()))));
                 }
             }
             return section_to_add;
@@ -97,11 +104,11 @@ fn parse(file_contents: &[&str], seek_to_column_in_line: Option<usize>, section_
 struct Section {
     parent_section: Option<Box<Section>>,
     section_name: String,
-    sub_sections: Vec<Mutex<Section>>,
+    sub_sections: Vec<Section>,
     key_value_pair_hashmap: HashMap<String, String>
 }
 impl Section {
-    fn new(section_name: String, sub_sections: Vec<Mutex<Section>>, key_value_pair_hashmap: HashMap<String, String>, parent_section: Option<Box<Section>>) -> Section {
+    fn new(section_name: String, sub_sections: Vec<Section>, key_value_pair_hashmap: HashMap<String, String>, parent_section: Option<Box<Section>>) -> Section {
         Section {
             parent_section,
             section_name,
@@ -219,8 +226,8 @@ licence=GPLv3
     #[test]
     fn supports_sub_sections_via_dot_operator_even_when_parent_section_does_not_exist() -> Result<(), Box<dyn std::error::Error>> {
 
+        // Arrange
         let mut tempfile: NamedTempFile = NamedTempFile::new()?;
-            // Arrange
         let file_contents = "
 [package]
 author=me
@@ -256,4 +263,27 @@ favorite_colour=blue
         Ok(())
 
     }
+    #[test]
+    fn comments_are_ignored() -> Result<(), Box<dyn std::error::Error>> {
+        // Arrange
+        let mut tempfile: NamedTempFile = NamedTempFile::new()?;
+        let file_contents = "
+[package]
+author=me
+name=mypackage#this is my package
+version=0.1.0
+";
+        assert!(tempfile.write(file_contents.as_bytes()).is_ok_and(|x| x > 0));
+        let file_contents_split = file_contents.split('\n').collect::<Vec<_>>();
+        // Act
+        let res = parse(&file_contents_split, None, None, None);
+
+        // Assert
+        let package_section = res.sub_sections.get(0).unwrap();
+        assert_eq!(package_section.section_name, String::from("package"));
+        assert!(package_section.key_value_pair_hashmap.get_key_value(&String::from("name")).is_some_and(|x| *x.0 == String::from("name") && *x.1 == String::from("mypackage")));
+        assert!(package_section.key_value_pair_hashmap.is_empty());
+        Ok(())
+    }
+    
 }
