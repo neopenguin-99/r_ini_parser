@@ -1,4 +1,5 @@
 #![feature(try_find)]
+use std::borrow::BorrowMut;
 use std::fs::{self};
 
 use clap::{crate_authors, crate_version, value_parser, Arg, ArgMatches, Command};
@@ -29,14 +30,17 @@ fn parse_sections(file_contents: &[&str], parent_section: Option<Box<Section>>) 
 
     for file_contents_line in file_contents {
         let section_names = file_contents_line.split('.').collect::<Vec<&str>>();
-        let mut current_section_ref = Mutex::new(global_section);
+        if section_names.is_empty() {
+            continue;
+        }
+        let mut section_ref = &mut global_section;
         for section_name in section_names {
-            if let Some(res) = current_section_ref.lock().unwrap().sub_sections.iter().filter(|x| x.lock().unwrap().section_name == String::from(section_name)).last() { // add it to the section if that section already exists
-                current_section_ref = *res;
+            if let Some(res) = section_ref.sub_sections.iter_mut().filter(|x| x.section_name == String::from(section_name)).last() { // add it to the section if that section already exists
+                section_ref = res;
             }
             else {
-                let new_section = Mutex::new(Section::new(String::from(section_name), vec![], HashMap::new(), None));
-                current_section_ref.lock().unwrap().sub_sections.push(new_section);
+                let new_section = Section::new(String::from(section_name), vec![], HashMap::new(), None);
+                section_ref.sub_sections.push(new_section);
             }
         }
     }
@@ -286,4 +290,12 @@ version=0.1.0
         Ok(())
     }
     
+    #[test]
+    fn change_what_is_pointed_to() -> Result<(), Box<dyn std::error::Error>> {
+        let a = 8;
+        let b = 4;
+        let mut a_ptr = &a;
+        a_ptr = &b;
+        Ok(())
+    }
 }
