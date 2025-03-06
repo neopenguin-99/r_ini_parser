@@ -1,10 +1,7 @@
 #![feature(try_find)]
-use std::borrow::BorrowMut;
 use std::fs::{self};
 
 use clap::{crate_authors, crate_version, value_parser, Arg, ArgMatches, Command};
-use std::rc::Rc;
-use std::sync::Mutex;
 use std::collections::HashMap;
 
 
@@ -26,25 +23,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 
 fn parse_sections(file_contents: &[&str], parent_section: Option<Box<Section>>) -> Section {
-    let mut global_section: Section = Section::new(String::from("global"), vec![], HashMap::new(), parent_section);
+    let mut section: Section = Section::new(String::from("global"), vec![], HashMap::new(), parent_section);
 
     for file_contents_line in file_contents {
         let section_names = file_contents_line.split('.').collect::<Vec<&str>>();
         if section_names.is_empty() {
             continue;
         }
-        let mut section_ref = &mut global_section;
         for section_name in section_names {
-            if let Some(res) = section_ref.sub_sections.iter_mut().filter(|x| x.section_name == String::from(section_name)).last() { // add it to the section if that section already exists
-                section_ref = res;
+            if let Some(res) = section.sub_sections.iter().filter(|x| x.section_name == String::from(section_name)).last() { // add it to the section if that section already exists
+                section = res.clone();
             }
             else {
                 let new_section = Section::new(String::from(section_name), vec![], HashMap::new(), None);
-                section_ref.sub_sections.push(new_section);
+                section.sub_sections.push(new_section);
             }
         }
     }
-    global_section
+    return section;
 }
 
 
@@ -287,15 +283,6 @@ version=0.1.0
         assert_eq!(package_section.section_name, String::from("package"));
         assert!(package_section.key_value_pair_hashmap.get_key_value(&String::from("name")).is_some_and(|x| *x.0 == String::from("name") && *x.1 == String::from("mypackage")));
         assert!(package_section.key_value_pair_hashmap.is_empty());
-        Ok(())
-    }
-    
-    #[test]
-    fn change_what_is_pointed_to() -> Result<(), Box<dyn std::error::Error>> {
-        let a = 8;
-        let b = 4;
-        let mut a_ptr = &a;
-        a_ptr = &b;
         Ok(())
     }
 }
