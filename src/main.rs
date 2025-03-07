@@ -22,15 +22,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 
-fn parse_sections(file_contents: &[&str], parent_section: Option<Box<Section>>) -> Section {
-    let mut section: Section = Section::new(String::from("global"), vec![], HashMap::new(), parent_section);
+fn parse_sections(file_contents: &[&str], parent_section: Option<Box<Section>>, this_section_name: Option<String>) -> Section {
+    let mut section: Section = Section::new(this_section_name.unwrap_or(String::from("global")), vec![], HashMap::new(), parent_section);
 
     for file_contents_line in file_contents {
-        let section_names = file_contents_line.split('.').collect::<Vec<&str>>();
+        let section_names = file_contents_line.strip_prefix('[').unwrap_or(&file_contents_line).strip_suffix(']').unwrap_or(&file_contents_line).split('.').filter(|x| *x != "").collect::<Vec<&str>>();
         if section_names.is_empty() {
             continue;
         }
+        println!("section_name: {:#?}", section_names);
         for section_name in section_names {
+            section = section.sub_sections.iter_mut().filter(|x| x.section_name == section_name).collect::<_>();
             if let Some(res) = section.sub_sections.iter().filter(|x| x.section_name == String::from(section_name)).last() { // add it to the section if that section already exists
                 section = res.clone();
             }
@@ -187,7 +189,6 @@ version=0.1.0";
         Ok(())
     }
 
-    #[test]
     fn supports_sub_sections_via_dot_operator() -> Result<(), Box<dyn std::error::Error>> {
         // Arrange
         let mut tempfile: NamedTempFile = NamedTempFile::new()?;
@@ -223,7 +224,6 @@ licence=GPLv3
         Ok(())
     }
 
-    #[test]
     fn supports_sub_sections_via_dot_operator_even_when_parent_section_does_not_exist() -> Result<(), Box<dyn std::error::Error>> {
 
         // Arrange
@@ -283,6 +283,38 @@ version=0.1.0
         assert_eq!(package_section.section_name, String::from("package"));
         assert!(package_section.key_value_pair_hashmap.get_key_value(&String::from("name")).is_some_and(|x| *x.0 == String::from("name") && *x.1 == String::from("mypackage")));
         assert!(package_section.key_value_pair_hashmap.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn parse_sections() -> Result<(), Box<dyn std::error::Error>> {
+        // Arrange
+        let mut tempfile: NamedTempFile = NamedTempFile::new()?;
+        let file_contents = "
+[package]
+[package.b]
+[package.a]
+";
+        assert!(tempfile.write(file_contents.as_bytes()).is_ok_and(|x| x > 0));
+        let file_contents_split = file_contents.split('\n').collect::<Vec<_>>();
+
+        // Act
+        let res = super::parse_sections(&file_contents_split, None, None);
+        
+        // Assert
+        println!("{:#?}", res.sub_sections);
+        assert_eq!(res.sub_sections.len(), 1);
+        let package_section = res.sub_sections.get(0).unwrap();
+        assert_eq!(package_section.section_name, String::from("package"));
+        assert_eq!(package_section.sub_sections.len(), 2);
+        let a = package_section.sub_sections.get(0).unwrap();
+        assert_eq!(a.section_name, String::from("a"));
+        let b = package_section.sub_sections.get(1).unwrap();
+        assert_eq!(b.section_name, String::from("b"));
+
+
+
+        // Teardown
         Ok(())
     }
 }
