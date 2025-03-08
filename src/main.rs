@@ -32,11 +32,11 @@ fn parse_sections(file_contents: &[&str], parent_section: Option<Box<Section>>, 
         }
         println!("section_name: {:#?}", section_names);
         for section_name in section_names {
-            section = section.sub_sections.iter_mut().filter(|x| x.section_name == section_name).collect::<_>();
-            if let Some(res) = section.sub_sections.iter().filter(|x| x.section_name == String::from(section_name)).last() { // add it to the section if that section already exists
+            if let Some(res) = section.sub_sections.iter().filter(|x| x.section_name == String::from(section_name)).last() { // add it to the section if that section already exists//include all of section_names in search
                 section = res.clone();
             }
             else {
+                println!("in here!");
                 let new_section = Section::new(String::from(section_name), vec![], HashMap::new(), None);
                 section.sub_sections.push(new_section);
             }
@@ -78,12 +78,7 @@ fn parse(file_contents: &[&str], seek_to_column_in_line: Option<usize>, section_
                 println!("{:#?}", seek_to_column_in_line);
                 println!("{}", location_of_dot_separator + 1);
                 println!("{}", &file_contents_line);
-                // println!("{}", &file_contents_line[seek_to_column_in_line.unwrap_or(1)..location_of_dot_separator + 1]);
                 let section_name = String::from(&file_contents_line[seek_to_column_in_line.unwrap_or(1)..seek_to_column_in_line.unwrap_or(1) + location_of_dot_separator]);
-                // let section_name_2 = String::from(&file_contents_line[seek_to_column_in_line.unwrap_or(1)..location_of_dot_separator + 1]);
-                // if String::from(&file_contents_line[seek_to_column_in_line.unwrap_or(1)..location_of_dot_separator]) == section_to_add.section_name {
-                    // section_to_add.key_value_pair_hashmap.insert(String::from(file_contents_line[..i].trim()), String::from(file_contents_line[i+1..].trim()));
-                // }
                 println!("{}", section_name);
                 let lines_remaining = file_contents.get((line_number)..);
                 section_to_add.sub_sections.push(parse(lines_remaining.unwrap(), Some(location_of_dot_separator + 1), Some(section_name), Some(Box::new(section_to_add.clone()))));
